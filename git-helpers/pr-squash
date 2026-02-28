@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Squash all commits since branching from base into one, then force-push.
+# Usage: pr-squash [base] [-m "message"]   or   pr-squash -b <base> [-m "message"]
+# Default base: PR_BASE_BRANCH env var, or master.
+
+set -e
+
+base="${PR_BASE_BRANCH:-master}"
+msg=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -b|--base)
+      base="$2"
+      shift 2
+      ;;
+    -m)
+      msg="$2"
+      shift 2
+      ;;
+    *)
+      if [[ "$base" == "${PR_BASE_BRANCH:-master}" ]] && [[ "$1" != -* ]]; then
+        base="$1"
+        shift
+      else
+        echo "pr-squash: unknown option $1" >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+current="$(git branch --show-current)"
+if [[ -z "$current" ]]; then
+  echo "pr-squash: not on a branch (detached HEAD). Aborting." >&2
+  exit 1
+fi
+if [[ "$current" == "$base" ]]; then
+  echo "pr-squash: already on base branch '$base'. Refusing to squash." >&2
+  exit 1
+fi
+
+merge_base="$(git merge-base origin/"$base" HEAD)"
+git reset --soft "$merge_base"
+if [[ -n "$msg" ]]; then
+  git commit -m "$msg"
+else
+  git commit
+fi
+git push --force-with-lease
